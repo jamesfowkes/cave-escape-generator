@@ -1,0 +1,74 @@
+<?xml version="1.0"?>
+
+<board type="Arduino Nano" name="Cave Escape Generator">
+
+    <info>
+        SSR controller for Cave Escape 'Mounments Men'
+        generator puzzle
+    </info>
+
+    <devices>
+        <device name="Ethernet" type="ENC28J60">
+            <setting id="cs_pin" value="10"></setting>
+        </device>
+
+        <device name="SSR1" type="Digital Output">
+            <setting id="pin" value="5"/>
+            <setting id="startup_state" value="LOW"/>
+        </device>
+
+        <device name="SSR2" type="Digital Output">
+            <setting id="pin" value="6"/>
+            <setting id="startup_state" value="LOW"/>
+        </device>
+
+        <device name="LinAc" type="Binary Output">
+            <setting id="pins" value="2, 3"/>
+        </device>
+
+        <device name="EmergencyPower" type="Debounced Input">
+            <setting id="pin" value="7"/>
+            <setting id="debounce_time" value="50"/>
+            <setting id="pullup" value="true"/>
+        </device>
+
+        <device name="FloatSwitch" type="Debounced Input">
+            <setting id="pin" value="8"/>
+            <setting id="debounce_time" value="50"/>
+            <setting id="pullup" value="true"/>
+        </device>
+
+        <device name="StartButton" type="Debounced Input">
+            <setting id="pin" value="9"/>
+            <setting id="debounce_time" value="50"/>
+            <setting id="pullup" value="true"/>
+        </device>
+
+    </devices>
+
+    <parameters>
+        <parameter name="StartButtonPressTime" type="Integer">
+            <setting id="type" value="uint32_t"/>
+            <setting id="init_value" value="5000"/>
+            <setting id="use_eeprom" value="true"/>
+        </parameter>
+    </parameters>
+    <modules>
+        <module>HTTP Get Server</module>
+        <module>Task</module>
+    </modules>
+
+    <custom_code>
+        <file>application.cpp</file>
+    </custom_code>
+
+    <defines>
+        <define>ENC28J60_BUFFER_SIZE 128</define>
+    </defines>
+
+    <logging>
+        <log_module>APPLICATION</log_module>
+    </logging>
+
+    <raat protocol="url" loglevel="RAAT_LOG_LEVEL_DEBUG"></raat>
+</board>
