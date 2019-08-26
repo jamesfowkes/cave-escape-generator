@@ -134,16 +134,32 @@ void raat_custom_setup(const raat_devices_struct& devices, const raat_params_str
 {
     (void)params;
     s_pDevices = &devices;
+    raat_logln_P(LOG_APP, PSTR("Waiting for emergency power..."));
 }
+
+#if 0
+static void debug_task_fn(RAATTask& task, void * pTaskData)
+{
+    (void)task; (void)pTaskData;
+}
+static RAATTask s_debug_task(250, debug_task_fn);
+#endif
 
 void raat_custom_loop(const raat_devices_struct& devices, const raat_params_struct& params)
 {
     (void)devices; (void)params;
 
+    bool bEmergencyPowerActivated = devices.pEmergencyPower->check_low_and_clear();
+    bool bEmergencyPowerDeactivated = devices.pEmergencyPower->check_high_and_clear();
+
+    bool bFuelTankFilled = devices.pFloatSwitch->check_low_and_clear();
+
+    bool bStartButtonPressed = devices.pStartButton->check_low_and_clear();
+
     switch(s_State)
     {
     case eState_WaitForEmergencyPower:
-        if (devices.pEmergencyPower->check_low_and_clear())
+        if (bEmergencyPowerActivated)
         {
             devices.pSSR1->set(true);
             s_State = eState_WaitForFloatSwitch;
@@ -153,14 +169,14 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
         break;
 
     case eState_WaitForFloatSwitch:
-        if (devices.pEmergencyPower->check_high_and_clear())
+        if (bEmergencyPowerDeactivated)
         {
             devices.pSSR1->set(false);
             s_State = eState_WaitForEmergencyPower;
             raat_logln_P(LOG_APP, PSTR("Lost emergency power"));
             raat_logln_P(LOG_APP, PSTR("Waiting..."));   
         }
-        else if (devices.pFloatSwitch->check_low_and_clear())
+        else if (bFuelTankFilled)
         {
             devices.pSSR2->set(true);
             s_State = eState_WaitForStart;
@@ -170,20 +186,14 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
         break;
 
     case eState_WaitForStart:
-        if (devices.pEmergencyPower->check_high_and_clear())
+        if (bEmergencyPowerDeactivated)
         {
             devices.pSSR1->set(false);
             devices.pSSR2->set(false);
             s_State = eState_WaitForEmergencyPower;
             raat_logln_P(LOG_APP, PSTR("Lost emergency power!"));
         }
-        else if (devices.pFloatSwitch->check_high_and_clear())
-        {
-            devices.pSSR2->set(false);
-            s_State = eState_WaitForFloatSwitch;
-            raat_logln_P(LOG_APP, PSTR("Lost float switch!"));
-        }
-        else if (devices.pStartButton->check_low_and_clear())
+        else if (bStartButtonPressed)
         {
             s_lastStartPressMs = millis();
             raat_logln_P(LOG_APP, PSTR("Start pressed (counting)"));
@@ -201,20 +211,15 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
         break;
 
     case eState_Started:
-        if (devices.pEmergencyPower->check_high_and_clear())
+        if (bEmergencyPowerDeactivated)
         {
             devices.pSSR1->set(false);
             devices.pSSR2->set(false);
             s_State = eState_WaitForEmergencyPower;
             raat_logln_P(LOG_APP, PSTR("Lost emergency power!"));
         }
-        else if (devices.pFloatSwitch->check_high_and_clear())
-        {
-            devices.pSSR2->set(false);
-            s_State = eState_WaitForFloatSwitch;
-            raat_logln_P(LOG_APP, PSTR("Lost float switch!"));
-        }
-        break;       
+        break;
     }
     handle_linac_movement();
+    //s_debug_task.run();
 }
