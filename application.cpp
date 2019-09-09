@@ -25,17 +25,18 @@ static eState s_State = eState_WaitForEmergencyPower;
 
 static unsigned long s_lastStartPressMs = 0U;
 static bool s_bLinAcIsAuto = true;
+static bool s_bLinAcLatch = false;
 
 static void control_linac(bool open)
 {
-    s_pDevices->pLinAc->set(open ? 1 : 2);
+    s_pDevices->pLinAc->set(open ? 0 : 3);
 }
 
 static void handle_linac_movement(void)
 {
     if (s_bLinAcIsAuto)
     {
-        control_linac(s_State == eState_Started);
+        control_linac(s_bLinAcLatch);
     }
 }
 
@@ -75,6 +76,7 @@ static void get_started_status(char const * const url)
 
 static void open_linac_url_handler(char const * const url)
 {
+    s_bLinAcLatch = true;
     if (url)
     {
         send_standard_erm_response();
@@ -85,6 +87,7 @@ static void open_linac_url_handler(char const * const url)
 
 static void close_linac_url_handler(char const * const url)
 {
+    s_bLinAcLatch = false;
     if (url)
     {
         send_standard_erm_response();
@@ -95,6 +98,7 @@ static void close_linac_url_handler(char const * const url)
 
 static void set_linac_auto(char const * const url)
 {
+    s_bLinAcLatch = false;
     if (url)
     {
         send_standard_erm_response();
@@ -204,6 +208,7 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
             if ((millis()- s_lastStartPressMs) >= params.pStartButtonPressTime->get())
             {
                 s_State = eState_Started;
+                s_bLinAcLatch = false;
                 devices.pSSR1->set(false);
                 raat_logln_P(LOG_APP, PSTR("Got start."));
             }
@@ -213,6 +218,7 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
     case eState_Started:
         if (bEmergencyPowerDeactivated)
         {
+            s_bLinAcLatch = true;
             devices.pSSR1->set(false);
             devices.pSSR2->set(false);
             s_State = eState_WaitForEmergencyPower;
