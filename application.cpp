@@ -24,19 +24,19 @@ static const raat_devices_struct * s_pDevices = NULL;
 static eState s_State = eState_WaitForEmergencyPower;
 
 static unsigned long s_lastStartPressMs = 0U;
-static bool s_bLinAcIsAuto = true;
-static bool s_bLinAcLatch = false;
+static bool s_bDoorIsAuto = true;
+static bool s_bDoorClosed = true;
 
-static void control_linac(bool open)
+static void open_door(bool open)
 {
-    s_pDevices->pLinAc->set(open ? 0 : 3);
+    s_pDevices->pSlidingDoorMaglock->set(!open);
 }
 
-static void handle_linac_movement(void)
+static void handle_maglock_state(void)
 {
-    if (s_bLinAcIsAuto)
+    if (s_bDoorIsAuto)
     {
-        control_linac(s_bLinAcLatch);
+        open_door(!s_bDoorClosed);
     }
 }
 
@@ -74,53 +74,52 @@ static void get_started_status(char const * const url)
     s_server.add_body_P(s_State == eState_Started ? PSTR("OPEN\r\n\r\n") : PSTR("CLOSED\r\n\r\n"));
 }
 
-static void open_linac_url_handler(char const * const url)
+static void open_door_url_handler(char const * const url)
 {
-    s_bLinAcLatch = true;
+    s_bDoorClosed = false;
     if (url)
     {
         send_standard_erm_response();
     }
-    control_linac(true);
-    s_bLinAcIsAuto = false;
+    open_door(true);
+    s_bDoorIsAuto = false;
 }
 
-static void close_linac_url_handler(char const * const url)
+static void close_door_url_handler(char const * const url)
 {
-    s_bLinAcLatch = false;
+    s_bDoorClosed = true;
     if (url)
     {
         send_standard_erm_response();
     }
-    control_linac(false);
-    s_bLinAcIsAuto = false;
+    open_door(false);
+    s_bDoorIsAuto = false;
 }
 
-static void set_linac_auto(char const * const url)
+static void set_maglock_auto(char const * const url)
 {
-    s_bLinAcLatch = false;
     if (url)
     {
         send_standard_erm_response();
     }
-    s_bLinAcIsAuto = true;
+    s_bDoorIsAuto = true;
 }
 
 static const char EPOWER_STATUS_URL[] PROGMEM = "/epower/status";
 static const char TANK_STATUS_URL[] PROGMEM = "/tank/status";
 static const char START_BUTTON_STATUS_URL[] PROGMEM = "/start/status";
-static const char LINAC_OPEN_URL[] PROGMEM = "/linac/open";
-static const char LINAC_CLOSE_URL[] PROGMEM = "/linac/close";
-static const char LINAC_AUTO_URL[] PROGMEM = "/linac/auto";
+static const char DOOR_OPEN_URL[] PROGMEM = "/door/open";
+static const char DOOR_CLOSE_URL[] PROGMEM = "/door/close";
+static const char DOOR_AUTO_URL[] PROGMEM = "/door/auto";
 
 static http_get_handler s_handlers[] = 
 {
     {EPOWER_STATUS_URL, get_epower_status},
     {TANK_STATUS_URL, get_tank_status},
     {START_BUTTON_STATUS_URL, get_started_status},
-    {LINAC_OPEN_URL, open_linac_url_handler},
-    {LINAC_CLOSE_URL, close_linac_url_handler},
-    {LINAC_AUTO_URL, set_linac_auto},
+    {DOOR_OPEN_URL, open_door_url_handler},
+    {DOOR_CLOSE_URL, close_door_url_handler},
+    {DOOR_AUTO_URL, set_maglock_auto},
     {"", NULL}
 };
 
@@ -144,10 +143,10 @@ void raat_custom_setup(const raat_devices_struct& devices, const raat_params_str
 static void debug_task_fn(RAATTask& task, void * pTaskData)
 {
     (void)task; (void)pTaskData;
-    raat_logln_P(LOG_APP, PSTR("Door: %s, State: %d, Auto?: %c"),
-        s_bLinAcLatch ? "Open" : "Closed",
+    raat_logln_P(LOG_APP, PSTR("Maglock: %s, State: %d, Auto?: %c"),
+        s_bDoorClosed ? "On" : "Off",
         (int)s_State,
-        s_bLinAcIsAuto ? 'Y' : 'N'
+        s_bDoorIsAuto ? 'Y' : 'N'
     );
 }
 static RAATTask s_debug_task(1000, debug_task_fn);
@@ -211,7 +210,7 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
             if ((millis()- s_lastStartPressMs) >= params.pStartButtonPressTime->get())
             {
                 s_State = eState_Started;
-                s_bLinAcLatch = true;
+                s_bDoorClosed = false;
                 devices.pSSR1->set(false);
                 raat_logln_P(LOG_APP, PSTR("Got start."));
             }
@@ -221,7 +220,7 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
     case eState_Started:
         if (bEmergencyPowerDeactivated)
         {
-            s_bLinAcLatch = false;
+            s_bDoorClosed = true;
             devices.pSSR1->set(false);
             devices.pSSR2->set(false);
             s_State = eState_WaitForEmergencyPower;
@@ -229,6 +228,7 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
         }
         break;
     }
-    handle_linac_movement();
-    s_debug_task.run();
+    handle_maglock_state();
+    //s_debug_task.run();
+    (void)s_debug_task;
 }

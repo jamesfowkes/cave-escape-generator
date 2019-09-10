@@ -22,8 +22,9 @@
             <setting id="startup_state" value="LOW"/>
         </device>
 
-        <device name="LinAc" type="Binary Output">
-            <setting id="pins" value="2, 3"/>
+        <device name="SlidingDoorMaglock" type="Digital Output">
+            <setting id="pin" value="2"/>
+            <setting id="startup_state" value="HIGH"/>
         </device>
 
         <device name="EmergencyPower" type="Debounced Input">
