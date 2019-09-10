@@ -141,13 +141,16 @@ void raat_custom_setup(const raat_devices_struct& devices, const raat_params_str
     raat_logln_P(LOG_APP, PSTR("Waiting for emergency power..."));
 }
 
-#if 0
 static void debug_task_fn(RAATTask& task, void * pTaskData)
 {
     (void)task; (void)pTaskData;
+    raat_logln_P(LOG_APP, PSTR("Door: %s, State: %d, Auto?: %c"),
+        s_bLinAcLatch ? "Open" : "Closed",
+        (int)s_State,
+        s_bLinAcIsAuto ? 'Y' : 'N'
+    );
 }
-static RAATTask s_debug_task(250, debug_task_fn);
-#endif
+static RAATTask s_debug_task(1000, debug_task_fn);
 
 void raat_custom_loop(const raat_devices_struct& devices, const raat_params_struct& params)
 {
@@ -208,7 +211,7 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
             if ((millis()- s_lastStartPressMs) >= params.pStartButtonPressTime->get())
             {
                 s_State = eState_Started;
-                s_bLinAcLatch = false;
+                s_bLinAcLatch = true;
                 devices.pSSR1->set(false);
                 raat_logln_P(LOG_APP, PSTR("Got start."));
             }
@@ -218,7 +221,7 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
     case eState_Started:
         if (bEmergencyPowerDeactivated)
         {
-            s_bLinAcLatch = true;
+            s_bLinAcLatch = false;
             devices.pSSR1->set(false);
             devices.pSSR2->set(false);
             s_State = eState_WaitForEmergencyPower;
@@ -227,5 +230,5 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
         break;
     }
     handle_linac_movement();
-    //s_debug_task.run();
+    s_debug_task.run();
 }
