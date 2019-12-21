@@ -13,31 +13,24 @@
 #include "http-get-server.hpp"
 
 typedef enum _eState {
+    eState_Setup,
     eState_WaitForEmergencyPower,
     eState_WaitForFloatSwitch,
     eState_WaitForStart,
     eState_Started
 } eState;
 
-static HTTPGetServer s_server(true);
+static HTTPGetServer s_server(NULL);
 static const raat_devices_struct * s_pDevices = NULL;
-static eState s_State = eState_WaitForEmergencyPower;
+static eState s_State = eState_Setup;
 
 static unsigned long s_lastStartPressMs = 0U;
-static bool s_bDoorIsAuto = true;
 static bool s_bDoorClosed = true;
 
 static void open_door(bool open)
 {
+    s_bDoorClosed = !open;
     s_pDevices->pSlidingDoorMaglock->set(!open);
-}
-
-static void handle_maglock_state(void)
-{
-    if (s_bDoorIsAuto)
-    {
-        open_door(!s_bDoorClosed);
-    }
 }
 
 static void send_standard_erm_response()
@@ -76,33 +69,38 @@ static void get_started_status(char const * const url)
 
 static void open_door_url_handler(char const * const url)
 {
-    s_bDoorClosed = false;
     if (url)
     {
         send_standard_erm_response();
     }
     open_door(true);
-    s_bDoorIsAuto = false;
 }
 
 static void close_door_url_handler(char const * const url)
 {
-    s_bDoorClosed = true;
     if (url)
     {
         send_standard_erm_response();
     }
     open_door(false);
-    s_bDoorIsAuto = false;
 }
 
-static void set_maglock_auto(char const * const url)
+static void start_game(char const * const url)
 {
     if (url)
     {
         send_standard_erm_response();
     }
-    s_bDoorIsAuto = true;
+    s_State = eState_WaitForEmergencyPower;
+}
+
+static void setup_game(char const * const url)
+{
+    if (url)
+    {
+        send_standard_erm_response();
+    }
+    s_State = eState_Setup;
 }
 
 static const char EPOWER_STATUS_URL[] PROGMEM = "/epower/status";
@@ -110,7 +108,8 @@ static const char TANK_STATUS_URL[] PROGMEM = "/tank/status";
 static const char START_BUTTON_STATUS_URL[] PROGMEM = "/start/status";
 static const char DOOR_OPEN_URL[] PROGMEM = "/door/open";
 static const char DOOR_CLOSE_URL[] PROGMEM = "/door/close";
-static const char DOOR_AUTO_URL[] PROGMEM = "/door/auto";
+static const char START_GAME[] PROGMEM = "/game/start";
+static const char SETUP_GAME[] PROGMEM = "/game/setup";
 
 static http_get_handler s_handlers[] = 
 {
@@ -119,7 +118,8 @@ static http_get_handler s_handlers[] =
     {START_BUTTON_STATUS_URL, get_started_status},
     {DOOR_OPEN_URL, open_door_url_handler},
     {DOOR_CLOSE_URL, close_door_url_handler},
-    {DOOR_AUTO_URL, set_maglock_auto},
+    {START_GAME, start_game},
+    {SETUP_GAME, setup_game},
     {"", NULL}
 };
 
@@ -143,10 +143,9 @@ void raat_custom_setup(const raat_devices_struct& devices, const raat_params_str
 static void debug_task_fn(RAATTask& task, void * pTaskData)
 {
     (void)task; (void)pTaskData;
-    raat_logln_P(LOG_APP, PSTR("Maglock: %s, State: %d, Auto?: %c"),
+    raat_logln_P(LOG_APP, PSTR("Maglock: %s, State: %d"),
         s_bDoorClosed ? "On" : "Off",
-        (int)s_State,
-        s_bDoorIsAuto ? 'Y' : 'N'
+        (int)s_State
     );
 }
 static RAATTask s_debug_task(1000, debug_task_fn);
@@ -164,6 +163,16 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
 
     switch(s_State)
     {
+    case eState_Setup:
+        devices.pSSR1->set(false);
+        devices.pSSR2->set(false);
+        devices.pSlidingDoorMaglock->set(true);
+        if (devices.pStartButton->state() == false)
+        {
+            start_game(NULL);
+        }
+        break;
+
     case eState_WaitForEmergencyPower:
         if (bEmergencyPowerActivated)
         {
@@ -210,7 +219,7 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
             if ((millis()- s_lastStartPressMs) >= params.pStartButtonPressTime->get())
             {
                 s_State = eState_Started;
-                s_bDoorClosed = false;
+                open_door(true);
                 devices.pSSR1->set(false);
                 raat_logln_P(LOG_APP, PSTR("Got start."));
             }
@@ -220,15 +229,10 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
     case eState_Started:
         if (bEmergencyPowerDeactivated)
         {
-            s_bDoorClosed = true;
-            devices.pSSR1->set(false);
-            devices.pSSR2->set(false);
-            s_State = eState_WaitForEmergencyPower;
             raat_logln_P(LOG_APP, PSTR("Lost emergency power!"));
         }
         break;
     }
-    handle_maglock_state();
     //s_debug_task.run();
     (void)s_debug_task;
 }
