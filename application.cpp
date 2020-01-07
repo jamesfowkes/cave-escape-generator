@@ -26,6 +26,7 @@ static eState s_State = eState_Setup;
 
 static unsigned long s_lastStartPressMs = 0U;
 static bool s_bDoorClosed = true;
+static bool s_bDoorOverridden = false;
 
 static void open_door(bool open)
 {
@@ -74,6 +75,7 @@ static void open_door_url_handler(char const * const url)
         send_standard_erm_response();
     }
     open_door(true);
+    s_bDoorOverridden = true;
 }
 
 static void close_door_url_handler(char const * const url)
@@ -87,6 +89,7 @@ static void close_door_url_handler(char const * const url)
 
 static void start_game(char const * const url)
 {
+    s_bDoorOverridden = false;
     if (url)
     {
         send_standard_erm_response();
@@ -96,6 +99,7 @@ static void start_game(char const * const url)
 
 static void setup_game(char const * const url)
 {
+    s_bDoorOverridden = false;
     if (url)
     {
         send_standard_erm_response();
@@ -164,11 +168,16 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
     switch(s_State)
     {
     case eState_Setup:
-        devices.pSSR1->set(false);
-        devices.pSSR2->set(false);
-        devices.pSlidingDoorMaglock->set(true);
+        devices.pSSR1->set(!devices.pEmergencyPower->state());
+        devices.pSSR2->set(!devices.pFloatSwitch->state());
+        if (!s_bDoorOverridden)
+        {
+            open_door(false);
+        }
         if (devices.pStartButton->state() == false)
         {
+            devices.pSSR1->set(false);
+            devices.pSSR2->set(false);
             start_game(NULL);
         }
         break;
@@ -184,6 +193,7 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
         break;
 
     case eState_WaitForFloatSwitch:
+        #if 0
         if (bEmergencyPowerDeactivated)
         {
             devices.pSSR1->set(false);
@@ -191,7 +201,9 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
             raat_logln_P(LOG_APP, PSTR("Lost emergency power"));
             raat_logln_P(LOG_APP, PSTR("Waiting..."));   
         }
-        else if (bFuelTankFilled)
+        else
+        #endif
+        if (bFuelTankFilled)
         {
             devices.pSSR2->set(true);
             s_State = eState_WaitForStart;
@@ -201,6 +213,7 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
         break;
 
     case eState_WaitForStart:
+        #if 0
         if (bEmergencyPowerDeactivated)
         {
             devices.pSSR1->set(false);
@@ -208,7 +221,9 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
             s_State = eState_WaitForEmergencyPower;
             raat_logln_P(LOG_APP, PSTR("Lost emergency power!"));
         }
-        else if (bStartButtonPressed)
+        else
+        #endif
+        if (bStartButtonPressed)
         {
             s_lastStartPressMs = millis();
             raat_logln_P(LOG_APP, PSTR("Start pressed (counting)"));
@@ -220,7 +235,7 @@ void raat_custom_loop(const raat_devices_struct& devices, const raat_params_stru
             {
                 s_State = eState_Started;
                 open_door(true);
-                devices.pSSR1->set(false);
+                devices.pSSR1->set(true); // Keep UV on for the cool
                 raat_logln_P(LOG_APP, PSTR("Got start."));
             }
         }
